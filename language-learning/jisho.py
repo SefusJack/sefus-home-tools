@@ -1,11 +1,13 @@
-import urllib.request, json 
+import urllib.request, json
+import requests 
 from openpyxl import Workbook
-
+from bs4 import BeautifulSoup
 
 wb = Workbook()
 
 #grab the active worksheet
 ws = wb.active
+ws2 = wb.create_sheet("Kanji")
 
 pound="%23"
 n5=pound+"jlpt-n5"
@@ -14,6 +16,7 @@ n3=pound+"jlpt-n3"
 n2=pound+"jlpt-n2"
 n1=pound+"jlpt-n1"
 definition=""
+kanji = list()
 
 hiragana = ["あ", "い", "う", "え", "お", 
             "か", "き", "く", "け", "こ", 
@@ -47,13 +50,14 @@ katakana = ["ア", "イ", "ウ", "エ", "オ",
             "ラ", "リ", "ル", "レ", "ロ",
             "ワ",                   "ヲ",
             "ン"]
-other = ["ー", "ィ", "ォ", "ッ", "ャ", "ュ", "っ", "ゃ", "々", "Ａ", "Ｂ", "Ｃ", "Ｄ", "Ｅ", "Ｆ", "Ｇ", "Ｈ", "Ｉ", 
+halfwidth = ["ー", "ィ", "ォ", "ッ", "ャ", "ュ", "っ", "ゃ", "々"]
+english = ["Ａ", "Ｂ", "Ｃ", "Ｄ", "Ｅ", "Ｆ", "Ｇ", "Ｈ", "Ｉ", 
             "Ｊ", "Ｋ", "Ｌ", "Ｍ", "Ｎ", "Ｏ", "Ｐ", "Ｑ", "Ｒ", "Ｓ", "Ｔ", "Ｕ", "Ｖ", "Ｗ",
             "Ｘ", "Ｙ", "Ｚ", "０", "１", "２", "３", "４", "５", "６", "７", "８", "９"]
 
 #Data can be assigned directly to cells
-ws.append(["Kanji", "Reading", "Meaning", "Tags"])
-
+ws.append(["Word", "Meaning", "Tags", "Kanji"])
+ws2.append(["Kanji", "Meaning", "Frequency", "Onyomi", "Kunyomi"])
 def getWord(data):
     if 'word' in data['japanese'][0]:
         return data['japanese'][0]['word']
@@ -102,46 +106,91 @@ def getPartOfSpeech(data):
 def getKanji(word):
     temp = list()
     for i in list(word):
-        if i not in hiragana and i not in katakana and i not in other:
+        if i not in hiragana and i not in katakana and i not in halfwidth and i not in english:
             temp.append(i)
+            if i not in kanji:
+                kanji.append(i)
     return ", ".join(temp)
 
-def hasOnlyKanji(word):
-    temp = list()
-    for i in list(word):
-        if i not in hiragana and not i in katakana and i not in other:
-            return true
-    return false
+def isKanji(char):
+    if char not in hiragana and not char in katakana and char not in halfwidth and char not in english:
+        return True
+    return False
 
-def hasOnlySimpleKana(word):
-    temp = list()
+#def hasOnlySimpleKana(word):
+#    temp = list()
+#    for i in list(word):
+#        if i not in hiragana and not i in katakana and i not in english:
+#            return true
+#    return false
+
+def isEnglish(word):
     for i in list(word):
-        if i not in hiragana and not i in katakana and i not in other:
-            return true
-    return false
+        if i in english:
+            return True
+    return False
 
 def getFurigana(word, reading):
-    temp = list()
-    for i in list(word):
-        if i not in hiragana and not i in katakana and i not in other:
-            return 
-    return true
+    wordcharacters = list(word)
+    readingcharacters = list(reading)
+    furichars = list()
+    furiword = ""
+    lastkanjipos = -1
+    for i in readingcharacters:            
+        if i not in wordcharacters:
+            furichars.append(i)
+
+    index = 0
+    for j in wordcharacters:
+        index += 1
+        if isKanji(j):
+            lastkanjipos = index
+        if isEnglish(word):
+            return reading
+    
+    if lastkanjipos > -1:
+        return word[:lastkanjipos] + "[" + "".join(furichars) + "]" + word[lastkanjipos:]
+    return word
 
 def readPage(page):
-    print("Page Number:" + str(page))
-    with urllib.request.urlopen("https://jisho.org/api/v1/search/words?keyword=%23jlpt-n5&page=" + str(page)) as url:
-        data = json.loads(url.read().decode())
-        if len(data['data']) != 0:
-            for i in data['data']:
-                word = getWord(i)
-                reading = getReading(i)
-                meaning = getMeaning(i)
-                kanji = getKanji(word)
-                tags = [getJLPT(i),getCommonality(i), getPartOfSpeech(i)]
-                ws.append([word, reading, meaning, " ".join(tags), kanji])
-            readPage(page + 1)
+    if(page < 10):
+        print("Page Number:" + str(page))
+        with urllib.request.urlopen("https://jisho.org/api/v1/search/words?keyword=%23jlpt-n5&page=" + str(page)) as url:
+            data = json.loads(url.read().decode())
+            if len(data['data']) != 0:
+                for i in data['data']:
+                    word = getWord(i)
+                    reading = getReading(i)
+                    meaning = getMeaning(i)
+                    kanji = getKanji(word)
+                    furigana = getFurigana(word, reading)
+                    tags = [getJLPT(i),getCommonality(i), getPartOfSpeech(i)]
+                    ws.append([furigana, meaning, " ".join(tags), kanji])
+                readPage(page + 1)
 
 readPage(1)
+for i in kanji:
+    url = requests.get("https://jisho.org/search/" + str(i) + "%20%23kanji")
+    soup = BeautifulSoup(url.content, 'html.parser')
+    #Newspaper Frequency
+    if soup.find_all("div", {"class": "frequency"}):
+        frequency = soup.find_all("div", {"class": "frequency"})[0].text.strip()
+    #Kanji Meaning
+    if soup.find_all("div", {"class": "kanji-details__main-meanings"}):
+        meaning = soup.find_all("div", {"class": "kanji-details__main-meanings"})[0].text.strip()
+    #Kunyomi
+    try:
+        if soup.find_all("dd", {"class": "kanji-details__main-readings-list"}):
+            kunyomi = soup.find_all("dd", {"class": "kanji-details__main-readings-list"})[0].text.strip()
+    except:
+        pass
+    #Onyomi
+    try:
+        if soup.find_all("dd", {"class": "kanji-details__main-readings-list"}):
+            onyomi = soup.find_all("dd", {"class": "kanji-details__main-readings-list"})[1].text.strip()
+    except:
+        pass
+    ws2.append([i, meaning, frequency, kunyomi, onyomi])
 #Rows can also be appended
 #ws.append(["sefus", test, 3])
 
