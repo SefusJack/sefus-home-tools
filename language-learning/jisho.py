@@ -1,9 +1,12 @@
 import urllib.request, json
 import requests 
-from openpyxl import Workbook
+import openpyxl
 from bs4 import BeautifulSoup
 
-wb = Workbook()
+try:
+    wb = openpyxl.load_workbook("sample.xlsx")
+except:
+    wb = Workbook()
 
 #grab the active worksheet
 ws = wb.active
@@ -16,7 +19,21 @@ n3=pound+"jlpt-n3"
 n2=pound+"jlpt-n2"
 n1=pound+"jlpt-n1"
 definition=""
-kanji = list()
+
+try:
+    wordslist = list()
+    for row in ws.iter_rows(ws.min_row+1,ws.max_row):
+        wordslist.append(row[0].value)
+except:
+    wordslist = list()
+
+try:
+    kanjilist = list()
+    for row in ws2.iter_rows(ws2.min_row+1,ws2.max_row):
+        kanjilist.append(row[0].value)
+except:
+    kanjilist = list()
+
 kanjidata = list()
 
 hiragana = ["あ", "い", "う", "え", "お", 
@@ -125,8 +142,8 @@ def getKanji(word):
     for i in list(word):
         if i not in hiragana and i not in katakana and i not in halfwidth and i not in english:
             temp.append(i)
-            if i not in kanji:
-                kanji.append(i)
+            if i not in kanjilist:
+                kanjilist.append(i)
                 kanjidata.append(kanjiSearch(i))
                 
     return temp
@@ -238,39 +255,37 @@ def kanjiSearch(kanji):
         url = requests.get("https://jisho.org/search/" + str(kanji) + "%20%23kanji")
         soup = BeautifulSoup(url.content, 'html.parser')
 
+        meaning = ""
+        kunyomi = ""
+        onyomi = ""
+        frequency = ""
         #Kanji Meaning
         if soup.find_all("div", {"class": "kanji-details__main-meanings"}):
             meaning = soup.find_all("div", {"class": "kanji-details__main-meanings"})[0].text.strip()
-        else:
-            meaning = ""
 
         #Kunyomi
         try:
             if soup.find_all("dd", {"class": "kanji-details__main-readings-list"}):
                 kunyomi = soup.find_all("dd", {"class": "kanji-details__main-readings-list"})[0].text.strip()
         except:
-            kunyomi = ""
             pass
         #Onyomi
         try:
             if soup.find_all("dd", {"class": "kanji-details__main-readings-list"}):
                 onyomi = soup.find_all("dd", {"class": "kanji-details__main-readings-list"})[1].text.strip()
         except:
-            onyomi = ""
             pass
         
         #Newspaper Frequency
         if soup.find_all("div", {"class": "frequency"}):
             frequency = soup.find_all("div", {"class": "frequency"})[0].text.strip()
-        else:
-            frequency = ""
 
         info = [meaning, kunyomi, onyomi ,frequency]
         return info
 
 def kanjiSearchToExcel():
     
-    for i in kanji:
+    for i in kanjilist:
         url = requests.get("https://jisho.org/search/" + str(i) + "%20%23kanji")
         soup = BeautifulSoup(url.content, 'html.parser')
 
@@ -325,8 +340,12 @@ def kanjiSearchToExcel():
         definitions = "= " + definitions[:-12]
         ws2.append([i, meaning, frequency, kunyomi, onyomi, definitions, tags])
 
-wordSearchToExcel(1, 100, n5)
-#kanjiSearchToExcel()
+def kanjiSearchFromExcelWords():
+    for i in kanjilist:
+        
+
+wordSearchToExcel(1, 1000, n4)
+kanjiSearchToExcel()
 
 #Save the file
 wb.save("sample.xlsx")
