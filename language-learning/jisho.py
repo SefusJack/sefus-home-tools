@@ -57,7 +57,7 @@ english = ["Ａ", "Ｂ", "Ｃ", "Ｄ", "Ｅ", "Ｆ", "Ｇ", "Ｈ", "Ｉ",
             "Ｘ", "Ｙ", "Ｚ", "０", "１", "２", "３", "４", "５", "６", "７", "８", "９"]
 
 #Data can be assigned directly to cells
-ws.append(["Word", "Meaning", "Tags", "Kanji 1", "Meaning 1", "Kunyomi 1", "Onyomi 1", "Kanji 2", "Meaning 2", "Kunyomi 2", "Onyomi 2", "Kanji 3", "Meaning 3", "Kunyomi 3", "Onyomi 3", "Kanji 4", "Meaning 4", "Kunyomi 4", "Onyomi 4" ])
+ws.append(["Word", "Meaning", "Tags", "Parts of Speech", "Kanji 1", "Meaning 1", "Kunyomi 1", "Onyomi 1", "Kanji 2", "Meaning 2", "Kunyomi 2", "Onyomi 2", "Kanji 3", "Meaning 3", "Kunyomi 3", "Onyomi 3", "Kanji 4", "Meaning 4", "Kunyomi 4", "Onyomi 4" ])
 ws2.append(["Kanji", "Meaning", "Frequency", "Onyomi", "Kunyomi"])
 def getWord(data):
     if 'word' in data['japanese'][0]:
@@ -104,7 +104,20 @@ def getCommonality(data):
 def getPartOfSpeech(data):
     temp = []
     for i in data['senses'][0]['parts_of_speech']:
-        temp.append(i.replace(" ", "_"))
+        if i == "Suru verb" or i == "Godan verb with 'ru' ending" or i == "Intransitive verb" or i == "Ichidan verb" or i == "Transitive verb" or i == "Godan verb with 'mu' ending" or i == "Godan verb with 'su' ending" or i == "Godan verb with 'u' ending" or i == "Godan verb with 'ku' ending" or i == "Kuru verb - special class" or i == "Suru verb - included" or i == "Godan verb with 'bu' ending" or i == "Godan verb with 'gu' ending" or i == "Noun or verb acting prenominally" or i == "Godan verb with 'nu' ending" or i == "Irregular nu verb" or i == "Godan verb - Iku/Yuku special class" or i == "Godan verb with 'tsu' ending" or i == "Godan verb with 'ru' ending (irregular verb)":
+            temp.append("Verb")
+        elif i == "Adverb (fukushi)" or i == "Adverb taking the 'to' particle":
+            temp.append("Adverb")
+        elif i == "Na-adjective (keiyodoshi)" or i == "I-adjective (keiyoushi)" or i == "Pre-noun adjectival (rentaishi)":
+            temp.append("Adjective")
+        elif i == "Noun which may take the genitive case particle 'no'" or i == "Noun, used as a prefix" or i == "Noun, used as a suffix":
+            temp.append("Noun")
+        elif i == "Expressions (phrases, clauses, etc.)":
+            temp.append("Expressions")
+        else:
+            temp.append(i)
+        
+    temp = list(dict.fromkeys(temp))
     return  " ".join(temp)
 
 def getKanji(word):
@@ -214,10 +227,12 @@ def wordSearchToExcel(start, limit, search):
                 meaning4 = ""
                 kunyomi4 = ""
                 onyomi4 = ""
-                
+
             furigana = getFurigana(word, reading)
-            tags = [getJLPT(j),getCommonality(j), getPartOfSpeech(j)]
-            ws.append([furigana, meaning, " ".join(tags), kanji1, meaning1, onyomi1, kunyomi1, kanji2, meaning2, onyomi2, kunyomi2, kanji3, meaning3, onyomi3, kunyomi3, kanji4, meaning4, onyomi4, kunyomi4])
+            partsofspeech = getPartOfSpeech(j)
+            tags = [getJLPT(j),getCommonality(j), partsofspeech]
+
+            ws.append([furigana, meaning, " ".join(tags), partsofspeech.replace(' ',', '), kanji1, meaning1, onyomi1, kunyomi1, kanji2, meaning2, onyomi2, kunyomi2, kanji3, meaning3, onyomi3, kunyomi3, kanji4, meaning4, onyomi4, kunyomi4])
 
 def kanjiSearch(kanji):
         url = requests.get("https://jisho.org/search/" + str(kanji) + "%20%23kanji")
@@ -310,8 +325,8 @@ def kanjiSearchToExcel():
         definitions = "= " + definitions[:-12]
         ws2.append([i, meaning, frequency, kunyomi, onyomi, definitions, tags])
 
-wordSearchToExcel(1, 1, n5)
-kanjiSearchToExcel()
+wordSearchToExcel(1, 100, n5)
+#kanjiSearchToExcel()
 
 #Save the file
 wb.save("sample.xlsx")
