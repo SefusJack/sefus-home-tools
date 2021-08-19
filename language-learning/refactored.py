@@ -1,11 +1,13 @@
 import urllib.request, json
 import requests 
+import openpyxl
 from openpyxl import Workbook
 from bs4 import BeautifulSoup
 import re
 
 kanjistash = list()
 kanjidata = list()
+
 pound="%23"
 n5=pound+"jlpt-n5"
 n4=pound+"jlpt-n4"
@@ -14,16 +16,20 @@ n2=pound+"jlpt-n2"
 n1=pound+"jlpt-n1"
 definition=""
 
+english = ["Ａ", "Ｂ", "Ｃ", "Ｄ", "Ｅ", "Ｆ", "Ｇ", "Ｈ", "Ｉ", 
+            "Ｊ", "Ｋ", "Ｌ", "Ｍ", "Ｎ", "Ｏ", "Ｐ", "Ｑ", "Ｒ", "Ｓ", "Ｔ", "Ｕ", "Ｖ", "Ｗ",
+            "Ｘ", "Ｙ", "Ｚ", "０", "１", "２", "３", "４", "５", "６", "７", "８", "９"]
+
 try:
     wb = openpyxl.load_workbook("sample.xlsx")
-    ws = wb.active
+    ws = wb["Sheet"]
     ws2 = wb["Kanji"]
 except:
     wb = Workbook()
     ws = wb.active
     ws2 = wb.create_sheet("Kanji")
     ws.append(["Word", "Meaning", "Tags", "Parts of Speech", "Kanji 1", "Meaning 1", "Kunyomi 1", "Onyomi 1", "Kanji 2", "Meaning 2", "Kunyomi 2", "Onyomi 2", "Kanji 3", "Meaning 3", "Kunyomi 3", "Onyomi 3", "Kanji 4", "Meaning 4", "Kunyomi 4", "Onyomi 4" ])
-    ws2.append(["Kanji", "Meaning", "Frequency", "Onyomi", "Kunyomi"])
+    ws2.append(["Kanji", "Meaning", "Frequency", "Kunyomi", "Onyomi"])
 
 #Returns a 2D list of all the Rows data from an excel worksheet
 def getDataFromAllExcelRows(worksheet, header):
@@ -156,7 +162,7 @@ def getCommonality(data):
 def getPartOfSpeech(data):
     temp = []
     for i in data['senses'][0]['parts_of_speech']:
-        if i == "Suru verb" or i == "Godan verb with 'ru' ending" or i == "Intransitive verb" or i == "Ichidan verb" or i == "Transitive verb" or i == "Godan verb with 'mu' ending" or i == "Godan verb with 'su' ending" or i == "Godan verb with 'u' ending" or i == "Godan verb with 'ku' ending" or i == "Kuru verb - special class" or i == "Suru verb - included" or i == "Godan verb with 'bu' ending" or i == "Godan verb with 'gu' ending" or i == "Noun or verb acting prenominally" or i == "Godan verb with 'nu' ending" or i == "Irregular nu verb" or i == "Godan verb - Iku/Yuku special class" or i == "Godan verb with 'tsu' ending" or i == "Godan verb with 'ru' ending (irregular verb)":
+        if i == "Suru verb" or i == "Godan verb with 'ru' ending" or i == "Intransitive verb" or i == "Ichidan verb" or i == "Transitive verb" or i == "Godan verb with 'mu' ending" or i == "Godan verb with 'su' ending" or i == "Godan verb with 'u' ending" or i == "Godan verb with 'ku' ending" or i == "Kuru verb - special class" or i == "Suru verb - included" or i == "Godan verb with 'bu' ending" or i == "Godan verb with 'gu' ending" or i == "Noun or verb acting prenominally" or i == "Godan verb with 'nu' ending" or i == "Irregular nu verb" or i == "Godan verb - Iku/Yuku special class" or i == "Godan verb with 'tsu' ending" or i == "Godan verb with 'ru' ending (irregular verb)" or i == "Ichidan verb - kureru special class" or i == "Godan verb - -aru special class" or i == "Auxiliary verb":
             temp.append("Verb")
         elif i == "Adverb (fukushi)" or i == "Adverb taking the 'to' particle":
             temp.append("Adverb")
@@ -188,24 +194,61 @@ def isEnglish(word):
             return True
     return False
 
+def isOnlyKanji(word):
+    for i in list(word):
+        if not isKanji(i):
+            return False
+    return True
+
 def getFurigana(word, reading):
-    wordcharacters = list(word)
-    readingcharacters = list(reading)
-    furichars = list()
-    furiword = ""
-    lastkanjipos = -1
-    for i in readingcharacters:            
-        if i not in wordcharacters:
-            furichars.append(i)
-    index = 0
-    for j in wordcharacters:
-        index += 1
-        if isKanji(j):
-            lastkanjipos = index
-    
-    if lastkanjipos > -1:
-        return word[:lastkanjipos] + "[" + "".join(furichars) + "]" + word[lastkanjipos:]
-    return word
+    if not isEnglish(word):
+        wordcharacters = list(word)
+        readingcharacters = list(reading)
+        readingcharlist = list()
+        temp = list()
+        furiword = ""
+        index = 0
+        for char in readingcharacters:
+            if char not in wordcharacters:
+                temp.append(char)
+                if index == len(readingcharacters)-1:
+                    readingcharlist.append("".join(temp))
+                    temp = list()
+                elif readingcharacters[index+1] in wordcharacters:
+                        readingcharlist.append("".join(temp))
+                        temp = list()
+            else:
+                temp.append(char)
+                readingcharlist.append(char)
+                temp = list()
+            index += 1
+
+        index = 0
+        furiPos = 0
+        for char in wordcharacters:
+            if isKanji(char):
+                temp.append(char)
+                if index == len(wordcharacters)-1:
+                    print(word)
+                    print(reading)
+                    print(char)
+                    furiword = furiword + "".join(temp) + "[" + readingcharlist[furiPos] + "]"
+                    furiPos += 1
+                    temp = list()
+                elif not isKanji(wordcharacters[index+1]):
+                        furiword = furiword + "".join(temp) + "[" + readingcharlist[furiPos] + "]"
+                        furiPos += 1
+                        temp = list()
+            else:
+                temp.append(char)
+                furiword = furiword + "".join(temp)
+                furiPos += 1
+                temp = list()
+            index += 1
+
+        return furiword
+    else:
+        return reading
 
 def readPage(start, limit, search):
     page = start
@@ -231,95 +274,31 @@ def wordSearchToExcel(start, limit, search):
             reading = getReading(j)
             meaning = getMeaning(j, 3, False)
             kanjiused =  getKanjiFromWord(word)
-            addKanjiListToStash(kanjiused)
-            getKanjiDataFromKanjiStash()
-            try:
-                kanji1 = kanjiused[0]
-                meaning1 = kanjidata[kanjistash.index(kanji1)][0]
-                kunyomi1 = kanjidata[kanjistash.index(kanji1)][1]
-                onyomi1 = kanjidata[kanjistash.index(kanji1)][2]
-            except:
-                kanji1 = ""
-                meaning1 = ""
-                kunyomi1 = ""
-                onyomi1 = ""
-            try:
-                kanji2 = kanjiused[1]
-                meaning2 = kanjidata[kanjistash.index(kanji2)][0]
-                kunyomi2 = kanjidata[kanjistash.index(kanji2)][1]
-                onyomi2 = kanjidata[kanjistash.index(kanji2)][2]
-            except:
-                kanji2 = ""
-                meaning2 = ""
-                kunyomi2 = ""
-                onyomi2 = ""
-            try:
-                kanji3 = kanjiused[2]
-                meaning3 = kanjidata[kanjistash.index(kanji3)][0]
-                kunyomi3 = kanjidata[kanjistash.index(kanji3)][1]
-                onyomi3 = kanjidata[kanjistash.index(kanji3)][2]
-            except:
-                kanji3 = ""
-                meaning3 = ""
-                kunyomi3 = ""
-                onyomi3 = ""
-            try:
-                kanji4 = kanjiused[3]
-                meaning4 = kanjidata[kanjistash.index(kanji4)][0]
-                kunyomi4 = kanjidata[kanjistash.index(kanji4)][1]
-                onyomi4 = kanjidata[kanjistash.index(kanji4)][2]
-            except:
-                kanji4 = ""
-                meaning4 = ""
-                kunyomi4 = ""
-                onyomi4 = ""
-
             furigana = getFurigana(word, reading)
             partsofspeech = getPartOfSpeech(j)
             tags = [getJLPT(j),getCommonality(j), partsofspeech]
+            ws.append([furigana, meaning, " ".join(tags), partsofspeech.replace(' ',', ')])
 
-            ws.append([furigana, meaning, " ".join(tags), partsofspeech.replace(' ',', '), kanji1, meaning1, onyomi1, kunyomi1, kanji2, meaning2, onyomi2, kunyomi2, kanji3, meaning3, onyomi3, kunyomi3, kanji4, meaning4, onyomi4, kunyomi4])
+def getListOfKanjiInKanjiData():
+    kanjis = list()
+    for i in kanjidata:
+        kanjis.append(i[0])
+    return kanjis
+
+def getIndexOfKanjiInKanjiData(kanji):
+    return getListOfKanjiInKanjiData().index(kanji)
 
 def kanjiSearch(kanji):
+    if kanji not in getListOfKanjiInKanjiData():
         url = requests.get("https://jisho.org/search/" + str(kanji) + "%20%23kanji")
         soup = BeautifulSoup(url.content, 'html.parser')
 
-        #Kanji Meaning
-        if soup.find_all("div", {"class": "kanji-details__main-meanings"}):
-            meaning = soup.find_all("div", {"class": "kanji-details__main-meanings"})[0].text.strip()
-        else:
-            meaning = ""
-
-        #Kunyomi
-        try:
-            if soup.find_all("dd", {"class": "kanji-details__main-readings-list"}):
-                kunyomi = soup.find_all("dd", {"class": "kanji-details__main-readings-list"})[0].text.strip()
-        except:
-            kunyomi = ""
-            pass
-        #Onyomi
-        try:
-            if soup.find_all("dd", {"class": "kanji-details__main-readings-list"}):
-                onyomi = soup.find_all("dd", {"class": "kanji-details__main-readings-list"})[1].text.strip()
-        except:
-            onyomi = ""
-            pass
-        
-        #Newspaper Frequency
-        if soup.find_all("div", {"class": "frequency"}):
-            frequency = soup.find_all("div", {"class": "frequency"})[0].text.strip()
-        else:
-            frequency = ""
-
-        info = [meaning, kunyomi, onyomi ,frequency]
-        return info
-
-def kanjiSearchToExcel():
-    
-    for i in kanji:
-        url = requests.get("https://jisho.org/search/" + str(i) + "%20%23kanji")
-        soup = BeautifulSoup(url.content, 'html.parser')
-
+        frequency = ""
+        meaning = ""
+        kunyomi = ""
+        onyomi = ""
+        grade = ""
+        jlpt = ""
         #Newspaper Frequency
         if soup.find_all("div", {"class": "frequency"}):
             frequency = soup.find_all("div", {"class": "frequency"})[0].text.strip()
@@ -335,7 +314,7 @@ def kanjiSearchToExcel():
         #Onyomi
         try:
             if soup.find_all("dd", {"class": "kanji-details__main-readings-list"}):
-                onyomi = soup.find_all("dd", {"class": "kanji-details__main-readings-list"})[1].text.strip()
+                onyomi = (soup.find_all("dd", {"class": "kanji-details__main-readings-list"})[1].text.strip()).translate(kat2hir)
         except:
             pass
         
@@ -354,9 +333,8 @@ def kanjiSearchToExcel():
                 jlpt = "jlpt-" + jlpt[11:].lower()
         except:
             pass
-
         tags = jlpt + " " + grade
-        words = readPage(1, 1, "*" + urllib.parse.quote(str(i) + "*"))
+        words = readPage(1, 1, "*" + urllib.parse.quote(str(kanji) + "*"))
         definitions = ""
         index = 0
         for j in words:
@@ -369,15 +347,54 @@ def kanjiSearchToExcel():
                         definitions = definitions + '"' + deffurigana + " " + defmeaning + '"' + " &CHAR(10)& "
                         index += 1
         definitions = "= " + definitions[:-12]
-        ws2.append([i, meaning, frequency, kunyomi, onyomi, definitions, tags])
+        info = [kanji, meaning, frequency, kunyomi, onyomi, definitions, tags]
+        kanjidata.append(info)
+    else:
+        info = kanjidata[getIndexOfKanjiInKanjiData(kanji)]
+    return info
+    
+
+def addKanjiDataToWords(worksheet, header, column):
+    addKanjiListToStash(getKanjiListFromExcelWorkSheet(worksheet, header, column))
+    words = getDataFromExcelColumn(worksheet, header, column)
+    currentrow = header+1
+    for kanjis in words:
+        temp = getKanjiFromWord(kanjis)
+        currentcol = 5
+        for kanji in temp:
+            data = kanjidata[getIndexOfKanjiInKanjiData(kanji)]
+            worksheet.cell(currentrow, currentcol).value = kanji
+            currentcol += 1
+            worksheet.cell(currentrow, currentcol).value = data[1]
+            currentcol += 1
+            worksheet.cell(currentrow, currentcol).value = data[3]
+            currentcol += 1
+            worksheet.cell(currentrow, currentcol).value = data[4]
+            currentcol += 1
+        currentrow += 1
 
 
+def kanjiSearchToExcel(kanji):
+    for i in kanji:
+        if i not in getListOfKanjiInKanjiData():
+            info = kanjiSearch(i)
+            ws2.append(info)
 
-#Redundancy
-addKanjiListToStash(getKanjiListFromExcelWorkSheet(ws, 1, 0))
-addKanjiStashToExcel(ws2, 1, 1)
+def getOnyomi(kanji):
+        return kanjiSearch(kanji)[4]
 
+def getKunyomi(kanji):
+        return kanjiSearch(kanji)[3]
+
+
+#Startup
+kanjistash = getKanjiListFromExcelWorkSheet(ws, 1, 0)
+kanjidata = getDataFromAllExcelRows(ws2, 1)
 #Start Here
-wordSearchToExcel(1, 1, n5)
+#wordSearchToExcel(1, 100, n4)
+addKanjiListToStash(getKanjiListFromExcelWorkSheet(ws, 1, 0))
+kanjiSearchToExcel(kanjistash)
+addKanjiDataToWords(ws, 1, 0)
+
 #End
 wb.save("sample.xlsx")
