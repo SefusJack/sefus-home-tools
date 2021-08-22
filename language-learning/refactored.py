@@ -1,10 +1,13 @@
 import urllib.request, json
+from urllib.parse import quote 
 import requests 
 import openpyxl
 from openpyxl import Workbook
 from bs4 import BeautifulSoup
 import re
+import time
 
+wordstash = list()
 kanjistash = list()
 kanjidata = list()
 
@@ -28,7 +31,7 @@ except:
     wb = Workbook()
     ws = wb.active
     ws2 = wb.create_sheet("Kanji")
-    ws.append(["Word", "Meaning", "Tags", "Parts of Speech", "Kanji 1", "Meaning 1", "Kunyomi 1", "Onyomi 1", "Kanji 2", "Meaning 2", "Kunyomi 2", "Onyomi 2", "Kanji 3", "Meaning 3", "Kunyomi 3", "Onyomi 3", "Kanji 4", "Meaning 4", "Kunyomi 4", "Onyomi 4" ])
+    ws.append(["Word", "Word Audio", "Original Word", "Reading", "Meaning", "Sentence", "Sentence Audio", "Sentence Meaning", "Parts of Speech" , "Kanji 1", "Meaning 1", "Kunyomi 1", "Onyomi 1", "Kanji 2", "Meaning 2", "Kunyomi 2", "Onyomi 2", "Kanji 3" ,"Meaning 3", "Kunyomi 3", "Onyomi 3", "Kanji 4", "Meaning 4", "Kunyomi 4", "Onyomi 4", "Picture", "Tags"])
     ws2.append(["Kanji", "Meaning", "Frequency", "Kunyomi", "Onyomi"])
 
 #Returns a 2D list of all the Rows data from an excel worksheet
@@ -65,7 +68,9 @@ def getDataFromCell(worksheet, row, column):
 
 #Returns True if the inputted character is a kanji, Returns false otherwise
 def isKanji(character):
-    return re.match(r'([^一-龯])', character) is None
+    #々 is an iteration mark
+    #ヶ can be considered an abbreviation
+    return re.match(r'([^一-龯])', character) is None or character == "々" or character == "ヶ"
 
 #Returns a list of kanji found in a word
 def getKanjiFromWord(word):
@@ -124,25 +129,27 @@ def getWord(data):
         return getReading(data)
 
 def getReading(data):
-    return data['japanese'][0]['reading']
+    if 'reading' in data['japanese'][0]:
+        return data['japanese'][0]['reading']
+    return ""
 
 def getMeaning(data, limit, multiwordf):
     temp = ""
-    index = 1
+    wordcharpos = 1
     length = len(data['senses'])
     if data['senses'][length-1]['parts_of_speech']:
         if data['senses'][length-1]['parts_of_speech'][0] == 'Wikipedia definition':
             length -= 1
     for i in data['senses']:
-            if index < length and index < limit:
-                temp = temp + '"' + str(index) + ". " + ", ".join(i['english_definitions']).replace('"','') + '"' + " &CHAR(10)& "
+            if wordcharpos < length and wordcharpos < limit:
+                temp = temp + '"' + str(wordcharpos) + ". " + ", ".join(i['english_definitions']).replace('"','') + '"' + " &CHAR(10)& "
             else:
                 if not multiwordf:
-                    temp = temp + '"' + str(index) + ". " + ", ".join(i['english_definitions']).replace('"','') + '"'
+                    temp = temp + '"' + str(wordcharpos) + ". " + ", ".join(i['english_definitions']).replace('"','') + '"'
                     return "= " + temp
                 else:
                     return ", ".join(i['english_definitions']).replace('"','')
-            index += 1
+            wordcharpos += 1
 
 def getJLPT(data):
     if data['jlpt']:
@@ -200,73 +207,150 @@ def isOnlyKanji(word):
             return False
     return True
 
+def hasKanji(word):
+    for i in list(word):
+        if isKanji(i):
+            return True
+    return False
+
 def getFurigana(word, reading):
-    if not isEnglish(word):
-        wordcharacters = list(word)
-        readingcharacters = list(reading)
-        readingcharlist = list()
-        temp = list()
+    if not isEnglish(word) and word != "":
         furiword = ""
-        index = 0
-        for char in readingcharacters:
-            if char not in wordcharacters:
-                temp.append(char)
-                if index == len(readingcharacters)-1:
-                    readingcharlist.append("".join(temp))
-                    temp = list()
-                elif readingcharacters[index+1] in wordcharacters:
-                        readingcharlist.append("".join(temp))
-                        temp = list()
-            else:
-                temp.append(char)
-                readingcharlist.append(char)
-                temp = list()
-            index += 1
-
-        index = 0
-        furiPos = 0
-        for char in wordcharacters:
-            if isKanji(char):
-                temp.append(char)
-                if index == len(wordcharacters)-1:
-                    print(word)
-                    print(reading)
-                    print(char)
-                    furiword = furiword + "".join(temp) + "[" + readingcharlist[furiPos] + "]"
-                    furiPos += 1
-                    temp = list()
-                elif not isKanji(wordcharacters[index+1]):
-                        furiword = furiword + "".join(temp) + "[" + readingcharlist[furiPos] + "]"
-                        furiPos += 1
-                        temp = list()
-            else:
-                temp.append(char)
-                furiword = furiword + "".join(temp)
-                furiPos += 1
-                temp = list()
-            index += 1
-
+        if isOnlyKanji(word):
+            return word + "[" + reading + "]"
+        else:
+            prevnode = None
+            currentnode = None
+            nextnode = None
+            wordpos = 0
+            readpos = 0
+            wordpos != len(word)-1
+            while wordpos < len(word) and readpos < len(reading):
+                currentnode = word[wordpos]
+                if wordpos != len(word)-1:
+                    nextnode = word[wordpos+1]
+                else:
+                    nextnode = None
+                
+                if isKanji(currentnode):
+                    furiword = furiword + currentnode
+                    if nextnode == None:
+                        furiword = furiword + "[" + reading[readpos:] + "]"
+                    wordpos += 1
+                    prevnode = currentnode
+                else:
+                    if prevnode == None:
+                        furiword = furiword + currentnode
+                        prevnode = currentnode
+                        readpos += 1
+                        wordpos += 1
+                    else:
+                        if isKanji(prevnode):
+                            if nextnode == None:
+                                furiword = furiword + "["
+                                while readpos != len(reading)-1:
+                                    furiword = furiword + reading[readpos]
+                                    readpos += 1
+                                furiword = furiword + "]" + currentnode
+                                readpos = len(reading)
+                            else:
+                                readpos += 1
+                                if isKanji(nextnode):
+                                    furiword = furiword + "[" + reading[:readpos]
+                                    furiword = furiword + "]"
+                                else:
+                                    if hasKanji(word[wordpos:]):
+                                        furiword = furiword + "["
+                                        while not isKanji(word[wordpos]):
+                                            furiword = furiword + word[wordpos]
+                                            wordpos += 1
+                                            readpos += 1
+                                        furiword = furiword + "]"
+                                        readpos += 1
+                                    else:
+                                        furiword = furiword + "[" + reading[:readpos]
+                                        while reading[readpos:] != word[wordpos:]:
+                                            furiword = furiword + reading[readpos]
+                                            readpos += 1
+                                        furiword = furiword + "]" + reading[readpos:]
+                                        readpos += len(reading)
+                                prevnode = currentnode
+                        else:
+                            furiword = furiword + currentnode
+                            prevnode = currentnode
+                            wordpos += 1
+                            readpos += 1
         return furiword
     else:
         return reading
 
-def readPage(start, limit, search):
-    page = start
-    if limit == 0:
-        limit = sys.maxint
-    data = list()
-    while(page <= limit):
-        print("Page Number:" + str(page))
-        with urllib.request.urlopen("https://jisho.org/api/v1/search/words?keyword=" + search + "&page=" + str(page)) as site:
+def request(page, search):
+    with urllib.request.urlopen("https://jisho.org/api/v1/search/words?keyword=" + str(search) + "&page=" + str(page)) as site:
+            time.sleep(0.5)
             result = json.loads(site.read().decode())
-        if len(result['data']) == 0:
-            return data
-        else:
-            data.append(result)
-        page += 1
-    return data
+    return result
 
-def wordSearchToExcel(start, limit, search):
+def readPage(start, limit, search):
+        page = start
+        if limit == 0:
+            limit = sys.maxint
+        data = list()
+        while(page <= limit):
+            result = request(page, search)
+            if len(result['data']) == 0:
+                return data
+            else:
+                data.append(result)
+            page += 1
+        return data
+
+def wordSearchToExcel(worksheet, header, search):
+    print("Searching For:" + removeFurigana(search))
+    data = readPage(1, 1, quote(removeFurigana(search)))
+    if data:
+        j = data[0]['data'][0]
+        temp = list()
+        word = getWord(j)
+        reading = getReading(j)
+        meaning = getMeaning(j, 3, False)
+        kanjiused =  getKanjiFromWord(word)
+        furigana = getFurigana(word, reading)
+        partsofspeech = getPartOfSpeech(j)
+        tags = [getJLPT(j),getCommonality(j), partsofspeech]
+        try:
+            kanji1 = kanjiused[0]
+        except:
+            kanji1 = ""
+        
+        try:
+            kanji2 = kanjiused[1]
+        except:
+            kanji2 = ""
+        
+        try:
+            kanji3 = kanjiused[2]
+        except:
+            kanji3 = ""
+        
+        try:
+            kanji4 = kanjiused[3]
+        except:
+            kanji4 = ""
+        
+        temp = [furigana, "", word, reading, meaning, "", "", "",  partsofspeech.replace(' ',', '), kanji1, "", "", "", kanji2, "", "", "", kanji3, "", "", "", kanji4, "", "", "", "", " ".join(tags)]
+        if search in wordstash:
+            for i in range(worksheet.min_column, worksheet.max_column+1):
+                worksheet.cell(wordstash.index(search)+header+1, i).value = temp[i-1]
+            wordstash[wordstash.index(search)] = furigana
+        elif furigana in wordstash:
+            for i in range(worksheet.min_column, worksheet.max_column+1):
+                worksheet.cell(wordstash.index(furigana)+header+1, i).value = temp[i-1]
+        else:
+            wordstash.append(furigana)
+            worksheet.append(temp)
+
+
+def tagSearchToExcel(start, limit, search):
     data = readPage(start, limit, search)
     for i in data:
         for j in i['data']:
@@ -277,7 +361,9 @@ def wordSearchToExcel(start, limit, search):
             furigana = getFurigana(word, reading)
             partsofspeech = getPartOfSpeech(j)
             tags = [getJLPT(j),getCommonality(j), partsofspeech]
-            ws.append([furigana, meaning, " ".join(tags), partsofspeech.replace(' ',', ')])
+            if furigana not in wordstash:
+                wordstash.append(furigana)
+                ws.append([furigana, "", word, reading, meaning, "", "", "",  partsofspeech.replace(' ',', '), "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", " ".join(tags)])
 
 def getListOfKanjiInKanjiData():
     kanjis = list()
@@ -285,8 +371,9 @@ def getListOfKanjiInKanjiData():
         kanjis.append(i[0])
     return kanjis
 
-def getIndexOfKanjiInKanjiData(kanji):
+def getwordcharposOfKanjiInKanjiData(kanji):
     return getListOfKanjiInKanjiData().index(kanji)
+
 
 def kanjiSearch(kanji):
     if kanji not in getListOfKanjiInKanjiData():
@@ -314,7 +401,7 @@ def kanjiSearch(kanji):
         #Onyomi
         try:
             if soup.find_all("dd", {"class": "kanji-details__main-readings-list"}):
-                onyomi = (soup.find_all("dd", {"class": "kanji-details__main-readings-list"})[1].text.strip()).translate(kat2hir)
+                onyomi = (soup.find_all("dd", {"class": "kanji-details__main-readings-list"})[1].text.strip())
         except:
             pass
         
@@ -336,21 +423,21 @@ def kanjiSearch(kanji):
         tags = jlpt + " " + grade
         words = readPage(1, 1, "*" + urllib.parse.quote(str(kanji) + "*"))
         definitions = ""
-        index = 0
+        wordcharpos = 0
         for j in words:
                 for k in j['data']:
-                    if index < 5:
+                    if wordcharpos < 5:
                         defword = getWord(k)
                         defreading = getReading(k)
                         defmeaning = getMeaning(k, 1, True)
                         deffurigana = getFurigana(defword, defreading)
                         definitions = definitions + '"' + deffurigana + " " + defmeaning + '"' + " &CHAR(10)& "
-                        index += 1
+                        wordcharpos += 1
         definitions = "= " + definitions[:-12]
         info = [kanji, meaning, frequency, kunyomi, onyomi, definitions, tags]
         kanjidata.append(info)
     else:
-        info = kanjidata[getIndexOfKanjiInKanjiData(kanji)]
+        info = kanjidata[getwordcharposOfKanjiInKanjiData(kanji)]
     return info
     
 
@@ -360,9 +447,14 @@ def addKanjiDataToWords(worksheet, header, column):
     currentrow = header+1
     for kanjis in words:
         temp = getKanjiFromWord(kanjis)
-        currentcol = 5
+        currentcol = 10
         for kanji in temp:
-            data = kanjidata[getIndexOfKanjiInKanjiData(kanji)]
+            try:
+                data = kanjidata[getwordcharposOfKanjiInKanjiData(kanji)]
+            except:
+                kanjiSearch(kanji)
+                data = kanjidata[getwordcharposOfKanjiInKanjiData(kanji)]
+
             worksheet.cell(currentrow, currentcol).value = kanji
             currentcol += 1
             worksheet.cell(currentrow, currentcol).value = data[1]
@@ -386,15 +478,44 @@ def getOnyomi(kanji):
 def getKunyomi(kanji):
         return kanjiSearch(kanji)[3]
 
+def removeFurigana(word):
+    wordcharacters = list(word)
+    temp = list()
+    ignore = False
+    for i in range(0, len(wordcharacters)):
+        if wordcharacters[i] == "[":
+            ignore = True
+        elif wordcharacters[i] == "]":
+            ignore = False
+        elif ignore == False:
+            temp.append(wordcharacters[i])
+
+    return "".join(temp)
+
 
 #Startup
 kanjistash = getKanjiListFromExcelWorkSheet(ws, 1, 0)
+print(kanjistash)
 kanjidata = getDataFromAllExcelRows(ws2, 1)
+wordstash = getDataFromExcelColumn(ws, 1, 0)
 #Start Here
-#wordSearchToExcel(1, 100, n4)
-addKanjiListToStash(getKanjiListFromExcelWorkSheet(ws, 1, 0))
+#tagSearchToExcel(1, 1000, n1)
+#addKanjiListToStash(getKanjiListFromExcelWorkSheet(ws, 1, 0))
+#print(wordstash[3])
+#getFurigana("ご主人", "ごしゅじん")
+#getFurigana("何時も", "いつも")
+#getFurigana("喋る", "しゃべる")
+#getFurigana("ご飯", "ごはん")
+#getFurigana("小さい", "ちいさい")
+#getFurigana("食べ物", "たべもの")
+#getFurigana("詰まり", "つまり")
+#getFurigana("私たち", "わたしたち")
+#getFurigana("お願い", "おねがい")
+#for i in wordstash:
+#    wordSearchToExcel(ws, 1, i)
+#print(removeFurigana(wordstash[3]))
+#wordSearchToExcel(ws, 1, removeFurigana(wordstash[3]))
 kanjiSearchToExcel(kanjistash)
-addKanjiDataToWords(ws, 1, 0)
-
+#addKanjiDataToWords(ws, 1, 0)
 #End
 wb.save("sample.xlsx")
